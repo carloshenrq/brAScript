@@ -1,0 +1,75 @@
+ src/map/mob.c    | 4 ++++
+ src/map/npc.c    | 2 ++
+ src/map/npc.h    | 2 ++
+ src/map/script.c | 2 ++
+ src/map/script.h | 3 +++
+ 5 files changed, 13 insertions(+)
+
+diff --git a/src/map/mob.c b/src/map/mob.c
+index 3ddeb55..a567e5e 100644
+--- a/src/map/mob.c
++++ b/src/map/mob.c
+@@ -2552,6 +2552,10 @@ int mob_dead(struct mob_data *md, struct block_list *src, int type) {
+ 				break;
+ 			}
+ 		}
++
++		// [CarlosHenrq] Label para execução quando um MVP é morto.
++		pc->setparam(mvp_sd, SP_KILLEDRID, md->class_);
++		npc->script_event(mvp_sd, NPCE_KILLMVP_NPC);
+ 	}
+ 
+ 	if (type&2 && !sd && md->class_ == MOBID_EMPELIUM && md->guardian_data) {
+diff --git a/src/map/npc.c b/src/map/npc.c
+index 4198bd3..ec5fd91 100644
+--- a/src/map/npc.c
++++ b/src/map/npc.c
+@@ -4570,6 +4570,8 @@ void npc_read_event_script(void)
+ 		{"Die Event",script->config.die_event_name},
+ 		{"Kill PC Event",script->config.kill_pc_event_name},
+ 		{"Kill NPC Event",script->config.kill_mob_event_name},
++		// [CarlosHenrq] Label para execução quando um MVP é morto.
++		{"Kill MVP Event", script->config.kill_mvp_event_name}
+ 	};
+ 
+ 	for (i = 0; i < NPCE_MAX; i++)
+diff --git a/src/map/npc.h b/src/map/npc.h
+index 48405ef..2d34943 100644
+--- a/src/map/npc.h
++++ b/src/map/npc.h
+@@ -147,6 +147,8 @@ enum npce_event {
+ 	NPCE_DIE,
+ 	NPCE_KILLPC,
+ 	NPCE_KILLNPC,
++	// [CarlosHenrq] Label para execu��o quando um MVP � morto.
++	NPCE_KILLMVP_NPC,
+ 	NPCE_MAX
+ };
+ 
+diff --git a/src/map/script.c b/src/map/script.c
+index 2a5c336..e511554 100644
+--- a/src/map/script.c
++++ b/src/map/script.c
+@@ -22006,6 +22006,8 @@ void script_defaults(void) {
+ 	script->config.ontouch_name = "OnTouch_";  //ontouch_name (runs on first visible char to enter area, picks another char if the first char leaves)
+ 	script->config.ontouch2_name = "OnTouch";  //ontouch2_name (run whenever a char walks into the OnTouch area)
+ 	script->config.onuntouch_name = "OnUnTouch";  //onuntouch_name (run whenever a char walks from the OnTouch area)
++	// [CarlosHenrq] Label para execução quando um MVP é morto.
++	script->config.kill_mvp_event_name = "OnMVPKillEvent";
+ 
+ 	// for ENABLE_CASE_CHECK
+ 	script->calc_hash_ci = calc_hash_ci;
+diff --git a/src/map/script.h b/src/map/script.h
+index b3dcd40..dbe51a4 100644
+--- a/src/map/script.h
++++ b/src/map/script.h
+@@ -361,6 +361,9 @@ struct Script_Config {
+ 	const char* ontouch_name;
+ 	const char* ontouch2_name;
+ 	const char* onuntouch_name;
++
++	// [CarlosHenrq] Label para execução quando um MVP é morto.
++	const char* kill_mvp_event_name;
+ };
+ 
+ /**
