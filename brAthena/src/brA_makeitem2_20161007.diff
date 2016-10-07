@@ -1,0 +1,36 @@
+src/map/script.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/src/map/script.c b/src/map/script.c
+index 2a5c336..0be49d7 100644
+--- a/src/map/script.c
++++ b/src/map/script.c
+@@ -7479,6 +7479,19 @@ BUILDIN(makeitem)
+     item_tmp.nameid = nameid;
+     item_tmp.identify=1;
+ 
++    // [CarlosHenrq]
++    if(!strcmp(script->getfuncname(st),"makeitem2"))
++    {
++        int i = 0;
++
++        item_tmp.identify = script_getnum(st, 7);
++        item_tmp.refine = cap_value(script_getnum(st, 8), 0, MAX_REFINE);
++        item_tmp.attribute = script_getnum(st, 9);
++        
++        while(i < MAX_SLOTS)
++            item_tmp.card[i++] = script_getnum(st, 9 + i);
++    }
++
+     map->addflooritem(NULL, &item_tmp, amount, m, x, y, 0, 0, 0, 0);
+ 
+     return true;
+@@ -21085,6 +21098,8 @@ void script_parse_builtin(void) {
+         BUILDIN_DEF(getnameditem,"vv"),
+         BUILDIN_DEF2(grouprandomitem,"groupranditem","i"),
+         BUILDIN_DEF(makeitem,"visii"),
++        // [CarlosHenrq]
++        BUILDIN_DEF2(makeitem, "makeitem2", "visiiiiiiiii"),
+         BUILDIN_DEF(delitem,"vi?"),
+         BUILDIN_DEF(delitem2,"viiiiiiii?"),
+         BUILDIN_DEF2(enableitemuse,"enable_items",""),

@@ -1,0 +1,81 @@
+ conf/map/battle/client.conf |  7 +++++++
+ src/map/battle.c            |  7 +++++++
+ src/map/battle.h            |  4 ++++
+ src/map/clif.c              | 13 +++++++++++++
+ 4 files changed, 31 insertions(+)
+
+diff --git a/conf/map/battle/client.conf b/conf/map/battle/client.conf
+index 3869924..7ccc5f7 100644
+--- a/conf/map/battle/client.conf
++++ b/conf/map/battle/client.conf
+@@ -57,6 +57,13 @@ max_body_style: 4
+ // actual damage caused by attacks. (Note 1)
+ hide_woe_damage: true
+ 
++// Informa o dano máximo para ser exibido no pacote de dano do cliente
++// Dependerá do hexed difado.
++// Hexeds superiores a 20071113, o dano máximo é definido por INT_MAX
++// Hexeds inferiores a 20071113, o dano máximo é definido por INT16_MAX
++// -> 0= Desabilitado.
++max_hit_damage: 0
++
+ // "hair style" number that identifies pet.
+ // NOTE: The client uses the "hair style" field in the mob packet to tell them apart from mobs.
+ // This value is always higher than the max hair-style available in said client.
+diff --git a/src/map/battle.c b/src/map/battle.c
+index 827cebe..85f14ed 100644
+--- a/src/map/battle.c
++++ b/src/map/battle.c
+@@ -7306,6 +7306,13 @@ static const struct battle_data {
+ 	{ "mob_explode_areasize",				&battle_config.mob_explode_areasize,			0,		0,	   14,				},
+ 	{ "mob_explode_hpdamage",				&battle_config.mob_explode_hpdamage,			1,		1,	   100,				},
+ 
++	// Limitação de dano máximo por packet (clif.c) que o client irá enviar para dano
++	// fisico [CarlosHenrq]
++#if PACKETVER < 20071113
++	{ "max_hit_damage",						&battle_config.max_hit_damage,					0,		0,		INT16_MAX,		},
++#else
++	{ "max_hit_damage",						&battle_config.max_hit_damage,					0,		0,		INT_MAX,		},
++#endif
+ };
+ #ifndef STATS_OPT_OUT
+ /**
+diff --git a/src/map/battle.h b/src/map/battle.h
+index ecf1a2c..765e086 100644
+--- a/src/map/battle.h
++++ b/src/map/battle.h
+@@ -585,6 +585,10 @@ struct Battle_Config {
+ 	// Configurações para explosão dos mobs [CarlosHenrq]
+ 	int mob_explode_areasize;
+ 	int mob_explode_hpdamage;
++
++	// Limitação de dano máximo por packet (clif.c) que o client irá enviar para dano
++	// fisico [CarlosHenrq]
++	int max_hit_damage;
+ };
+ 
+ /* criteria for battle_config.idletime_critera */
+diff --git a/src/map/clif.c b/src/map/clif.c
+index cb0cd3f..9d283a2 100644
+--- a/src/map/clif.c
++++ b/src/map/clif.c
+@@ -4401,6 +4401,19 @@ int clif_damage(struct block_list* src, struct block_list* dst, int sdelay, int
+ 	damage2 = (int)min(in_damage2,INT_MAX);
+ #endif
+ 
++	// Limitação de dano máximo por packet (clif.c) que o client irá enviar para dano
++	// fisico [CarlosHenrq]
++	if(battle_config.max_hit_damage > 0)
++	{
++#if PACKETVER < 20071113
++		damage 	= (short)min(damage,	battle_config.max_hit_damage);
++		damage2 = (short)min(damage2,	battle_config.max_hit_damage);
++#else
++		damage 	= (int)min(damage,	battle_config.max_hit_damage);
++		damage2 = (int)min(damage2,	battle_config.max_hit_damage);
++#endif
++	}
++
+ 	type = clif_calc_delay(type,div,damage+damage2,ddelay);
+ 
+ 	p.PacketType = damageType;
