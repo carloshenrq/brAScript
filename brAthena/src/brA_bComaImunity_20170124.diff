@@ -1,0 +1,148 @@
+ sql/pre-renovacao/pre-renovacao.sql |  1 +
+ sql/renovacao/renovacao.sql         |  1 +
+ src/map/map.h                       |  3 +++
+ src/map/pc.c                        |  7 +++++++
+ src/map/pc.h                        |  1 +
+ src/map/status.c                    | 27 +++++++++++++++++++++++++++
+ src/map/status.h                    |  3 +++
+ 7 files changed, 43 insertions(+)
+
+diff --git a/sql/pre-renovacao/pre-renovacao.sql b/sql/pre-renovacao/pre-renovacao.sql
+index 3fe55e4..d48447f 100644
+--- a/sql/pre-renovacao/pre-renovacao.sql
++++ b/sql/pre-renovacao/pre-renovacao.sql
+@@ -857,6 +857,7 @@ REPLACE INTO const_db VALUES('bSetDefRace','2059',0);
+ REPLACE INTO const_db VALUES('bSetMDefRace','2060',0);
+ REPLACE INTO const_db VALUES('bAddRaceTolerance','2061',0);
+ REPLACE INTO const_db VALUES('bAddMaxWeight','2062',0);
++REPLACE INTO const_db VALUES('bComaImunity', '2064', 0);
+ REPLACE INTO const_db VALUES('EQI_HEAD_TOP','1',0);
+ REPLACE INTO const_db VALUES('EQI_ARMOR','2',0);
+ REPLACE INTO const_db VALUES('EQI_HAND_L','3',0);
+diff --git a/sql/renovacao/renovacao.sql b/sql/renovacao/renovacao.sql
+index 701f6a6..7bf18da 100644
+--- a/sql/renovacao/renovacao.sql
++++ b/sql/renovacao/renovacao.sql
+@@ -857,6 +857,7 @@ REPLACE INTO const_db VALUES('bSetDefRace','2059',0);
+ REPLACE INTO const_db VALUES('bSetMDefRace','2060',0);
+ REPLACE INTO const_db VALUES('bAddRaceTolerance','2061',0);
+ REPLACE INTO const_db VALUES('bAddMaxWeight','2062',0);
++REPLACE INTO const_db VALUES('bComaImunity', '2064', 0);
+ REPLACE INTO const_db VALUES('EQI_HEAD_TOP','1',0);
+ REPLACE INTO const_db VALUES('EQI_ARMOR','2',0);
+ REPLACE INTO const_db VALUES('EQI_HAND_L','3',0);
+diff --git a/src/map/map.h b/src/map/map.h
+index e53c641..7860de6 100644
+--- a/src/map/map.h
++++ b/src/map/map.h
+@@ -468,6 +468,9 @@ enum status_point_types {
+ 
+ 	/* must be the last, plugins add bonuses from this value onwards */
+ 	SP_LAST_KNOWN,
++
++	// [CarlosHenrq] Imunidade ao coma
++	SP_COMA_IMUNITY,
+ };
+ 
+ enum look {
+diff --git a/src/map/pc.c b/src/map/pc.c
+index 02b5219..d340a07 100644
+--- a/src/map/pc.c
++++ b/src/map/pc.c
+@@ -3014,6 +3014,11 @@ int pc_bonus(struct map_session_data *sd,int type,int val) {
+ 			if (sd->state.lr_flag != 2)
+ 				sd->max_weight += val;
+ 		break;
++		// [CarlosHenrq] Imunidade ao coma.
++		case SP_COMA_IMUNITY:
++			if(sd->state.lr_flag != 2)
++				sd->special_state.coma_imunity = 1;
++			break;
+ 		default:
+ 			ShowWarning("pc_bonus: tipo desconhecido %d %d !\n",type,val);
+ 			break;
+@@ -8178,6 +8183,8 @@ int pc_readparam(struct map_session_data* sd,int type)
+ 		case SP_VARCASTRATE:     val = sd->bonus.varcastrate; break;
+ 		case SP_ADD_VARIABLECAST:val = sd->bonus.add_varcast; break;
+ #endif
++		// [CarlosHenrq] Imunidade ao coma
++		case SP_COMA_IMUNITY:	val	= sd->special_state.coma_imunity ? 1 : 0; break;
+ 	}
+ 
+ 	return val;
+diff --git a/src/map/pc.h b/src/map/pc.h
+index 30f2383..8ee8f61 100644
+--- a/src/map/pc.h
++++ b/src/map/pc.h
+@@ -232,6 +232,7 @@ struct map_session_data {
+ 		unsigned int perfect_hiding : 1; // [Valaris]
+ 		unsigned int no_knockback : 1;
+ 		unsigned int bonus_coma : 1;
++		unsigned int coma_imunity : 1;
+ 	} special_state;
+ 	int login_id1, login_id2;
+ 	unsigned short class_; //This is the internal job ID used by the map server to simplify comparisons/queries/etc. [Skotlex]
+diff --git a/src/map/status.c b/src/map/status.c
+index fccbf87..4ce8865 100644
+--- a/src/map/status.c
++++ b/src/map/status.c
+@@ -6607,6 +6607,26 @@ int status_isimmune(struct block_list *bl)
+ 	return 0;
+ }
+ 
++/**
++ * Verifica se o personagem possui imunidade ao coma.
++ *
++ * @author CarlosHenrq
++ * @param bl
++ *
++ * @return Verdadeiro caso seja imune ao coma.
++ */
++bool status_isimmune_coma(struct block_list* bl)
++{
++	struct map_session_data* sd;
++	// Se não for um jogador, não possui imunidade ao coma.
++	if(bl == NULL || bl->type != BL_PC || (sd = BL_UCAST(BL_PC, bl)) == NULL)
++		return false;
++
++	// Verifica se o jogador possui status de imunidade
++	// ao coma.
++	return (sd->special_state.coma_imunity == 1);
++}
++
+ struct view_data *status_get_viewdata(struct block_list *bl)
+ {
+ 	nullpo_retr(NULL, bl);
+@@ -6850,6 +6870,10 @@ int status_get_sc_def(struct block_list *src, struct block_list *bl, enum sc_typ
+ 			return 0;
+ 		}
+ 
++	// [CarlosHenrq] Imunidade ao coma.
++	if(type == SC_COMA && status->isimmune_coma(bl))
++		return 0;
++
+ 	sd = BL_CAST(BL_PC,bl);
+ 	st = status->get_status_data(bl);
+ 	bst = status->get_base_status(bl);
+@@ -13304,4 +13328,7 @@ void status_defaults(void) {
+ 	status->read_job_db_sub = status_read_job_db_sub;
+ 	status->buff_script = buff_script;
+ 	status->buffspecial_db = buffspecial_db;
++
++	// [CarlosHenrq] Imunidade ao coma.
++	status->isimmune_coma = status_isimmune_coma;
+ }
+diff --git a/src/map/status.h b/src/map/status.h
+index fa22682..c6e2a6d 100644
+--- a/src/map/status.h
++++ b/src/map/status.h
+@@ -2346,6 +2346,9 @@ struct status_interface {
+ 	bool (*readdb_scconfig) (char *fields[], int columns, int current);
+ 	void (*read_job_db) (void);
+ 	void (*read_job_db_sub) (int idx, const char *name, config_setting_t *jdb);
++
++	// [CarlosHenrq] Imunidade ao coma.
++	bool (*isimmune_coma)(struct block_list*);
+ };
+ 
+ struct status_interface *status;
