@@ -1,0 +1,192 @@
+ src/map/itemdb.c | 49 +++++++++++++++++++++++++++++++++++++++++++++++++
+ src/map/itemdb.h | 19 +++++++++++++++++++
+ src/map/map.c    | 12 ++++++++++++
+ src/map/pc.c     |  9 ++++++++-
+ src/map/script.c | 15 +++++++++++++++
+ 5 files changed, 103 insertions(+), 1 deletion(-)
+
+diff --git a/src/map/itemdb.c b/src/map/itemdb.c
+index 445307a..461bb89 100644
+--- a/src/map/itemdb.c
++++ b/src/map/itemdb.c
+@@ -2185,6 +2185,50 @@ bool itemdb_is_item_usable(struct item_data *item)
+ 	nullpo_retr(false, item);
+ 	return item->type == IT_HEALING || item->type == IT_USABLE || item->type == IT_CASH;
+ }
++/**
++ * Função para verificar se o item criado é um item do tipo STUFF [CarlosHenrq]
++ */
++bool itemdb_is_stuff(struct item* item)
++{
++	// Verifica se o item é do tipo stuff.
++	return (item
++			&& item->card[0] == CARD0_CREATE
++			&& item->card[2] >= ITEM_STUFF_PVP
++			&& item->card[2] < ITEM_STUFF_MAX);
++}
++
++/**
++ * Função para verificar se o item é uma stuff e de que tipo ele é. [CarlosHenrq]
++ */
++bool itemdb_is_stuff_type(struct item* item, item_stuff stuff_type)
++{
++	return (itemdb->is_stuff(item) && item->card[2] == stuff_type);
++}
++
++/**
++ * Função para verificar se o item tipo stuff informado pode ser usado na localização
++ *  em que se encontra. [CarlosHenrq]
++ */
++bool itemdb_is_stuff_usable(struct item* item, struct map_session_data* sd)
++{
++	// Item não é stuff? Pode ser usado.
++	if(!itemdb->is_stuff(item))
++		return true;
++
++	// Verifica os tipos de stuff declarados para uso.
++	switch(item->card[2])
++	{
++		case ITEM_STUFF_PVP: return (map->list[sd->bl.m].flag.pvp);
++		case ITEM_STUFF_GVG: return (map->list[sd->bl.m].flag.gvg);
++		case ITEM_STUFF_BTG: return (map->list[sd->bl.m].flag.battleground);
++		case ITEM_STUFF_WOE: return (map->list[sd->bl.m].flag.gvg_castle && (map->agit_flag || map->agit2_flag));
++		default:
++			break;
++	}
++
++	// Caso não exista, não pode ser usado.
++	return false;
++}
+ 
+ /*==========================================
+  * Initialize / Finalize
+@@ -2476,4 +2520,9 @@ void itemdb_defaults(void) {
+ 	itemdb->id2combo = itemdb_id2combo;
+ 	itemdb->is_item_usable = itemdb_is_item_usable;
+ 	itemdb->lookup_const = itemdb_lookup_const;
++
++	// Sistema de consumiveis. [CarlosHenrq]
++	itemdb->is_stuff = itemdb_is_stuff;
++	itemdb->is_stuff_type = itemdb_is_stuff_type;
++	itemdb->is_stuff_usable = itemdb_is_stuff_usable;
+ }
+diff --git a/src/map/itemdb.h b/src/map/itemdb.h
+index 571512e..1a4f25a 100644
+--- a/src/map/itemdb.h
++++ b/src/map/itemdb.h
+@@ -48,6 +48,20 @@ struct hplugin_data_store;
+ //Use apple for unknown items.
+ #define UNKNOWN_ITEM_ID 512
+ 
++/**
++ * Sistema de consumiveis personalizados.
++ * -> [PVP], [GVG], [BTG] e [WOE]
++ */
++typedef enum item_stuff
++{
++	ITEM_STUFF_PVP = 32760,
++	ITEM_STUFF_GVG,
++	ITEM_STUFF_BTG,
++	ITEM_STUFF_WOE,
++
++	ITEM_STUFF_MAX
++} item_stuff;
++
+ enum item_itemid {
+ 	ITEMID_RED_POTION            = 501,
+ 	ITEMID_YELLOW_POTION         = 503,
+@@ -654,6 +668,11 @@ struct itemdb_interface {
+ 	struct item_combo * (*id2combo) (unsigned short id);
+ 	bool (*is_item_usable) (struct item_data *item);
+ 	bool (*lookup_const) (const struct config_setting_t *it, const char *name, int *value);
++
++	// Sistema de consumiveis. [CarlosHenrq]
++	bool (*is_stuff) (struct item* item);
++	bool (*is_stuff_type) (struct item* item, item_stuff stuff_type);
++	bool (*is_stuff_usable) (struct item* item, struct map_session_data* sd);
+ };
+ 
+ #ifdef HERCULES_CORE
+diff --git a/src/map/map.c b/src/map/map.c
+index 16d5e64..a7584d5 100644
+--- a/src/map/map.c
++++ b/src/map/map.c
+@@ -1801,6 +1801,18 @@ void map_reqnickdb(struct map_session_data * sd, int charid)
+ 
+ 	nullpo_retv(sd);
+ 
++	// Sistema de consumiveis. [CarlosHenrq]
++	if(charid >= ITEM_STUFF_PVP && charid < ITEM_STUFF_MAX)
++	{
++		clif->solved_charname(sd->fd,
++			charid,
++			(charid == ITEM_STUFF_PVP ? "[PVP]" :
++			(charid == ITEM_STUFF_GVG ? "[GVG]" : 
++			(charid == ITEM_STUFF_BTG ? "[BTG]" :
++			(charid == ITEM_STUFF_WOE ? "[WOE]" : "[???]")))));
++		return;
++	}
++
+ 	tsd = map->charid2sd(charid);
+ 	if( tsd ) {
+ 		clif->solved_charname(sd->fd, charid, tsd->status.name);
+diff --git a/src/map/pc.c b/src/map/pc.c
+index 9ef7d08..ead3f63 100644
+--- a/src/map/pc.c
++++ b/src/map/pc.c
+@@ -4532,7 +4532,10 @@ int pc_search_inventory(struct map_session_data *sd, int item_id) {
+ 	int i;
+ 	nullpo_retr(INDEX_NOT_FOUND, sd);
+ 
+-	ARR_FIND( 0, MAX_INVENTORY, i, sd->status.inventory[i].nameid == item_id && (sd->status.inventory[i].amount > 0 || item_id == 0) );
++	ARR_FIND( 0, MAX_INVENTORY, i,
++		sd->status.inventory[i].nameid == item_id && (sd->status.inventory[i].amount > 0 || item_id == 0)
++		&& (!itemdb->is_stuff(&sd->status.inventory[i]) || itemdb->is_stuff_usable(&sd->status.inventory[i], sd))
++	);
+ 	return ( i < MAX_INVENTORY ) ? i : INDEX_NOT_FOUND;
+ }
+ 
+@@ -4827,6 +4830,10 @@ int pc_isUseitem(struct map_session_data *sd,int n)
+ 	if( !item->script ) //if it has no script, you can't really consume it!
+ 		return 0;
+ 
++	// Sistema de consumiveis. [CarlosHenrq]
++	if(!itemdb->is_stuff_usable(&sd->status.inventory[n], sd))
++		return 0;
++
+ 	if ((item->item_usage.flag&INR_SITTING) && (pc_issit(sd) == 1) && (pc_get_group_level(sd) < item->item_usage.override)) {
+ 		clif->msgtable(sd, MSG_ITEM_NEED_STANDING);
+ 		//clif->messagecolor_self(sd->fd, COLOR_WHITE, msg_txt(1474));
+diff --git a/src/map/script.c b/src/map/script.c
+index 48c377d..e641b23 100644
+--- a/src/map/script.c
++++ b/src/map/script.c
+@@ -7757,6 +7757,19 @@ BUILDIN(getitem) {
+ 		it.bound = (unsigned char)bound;
+ 		offset += 1;
+ 	}
++	// Sistema de consumiveis. [CarlosHenrq]
++	else if (!strcmp(script->getfuncname(st), "getitemstuff"))
++	{
++		item_stuff stuff_flag = ITEM_STUFF_PVP + script_getnum(st, 4);
++		if(stuff_flag < ITEM_STUFF_PVP || stuff_flag >= ITEM_STUFF_MAX)
++		{
++			ShowError("script_getitemstuff: Not a correct flag! Flag=%d\n", stuff_flag);
++			return false;
++		}
++		it.card[0] = CARD0_CREATE;
++		it.card[2] = stuff_flag;
++		offset += 1;
++	}
+ 
+ 	if (script_hasdata(st,4+offset))
+ 		sd = script->id2sd(st, script_getnum(st,4+offset)); // <Account ID>
+@@ -21018,6 +21031,8 @@ void script_parse_builtin(void) {
+ 		BUILDIN_DEF(deletearray,"r?"),
+ 		BUILDIN_DEF(getelementofarray,"ri"),
+ 		BUILDIN_DEF(getitem,"vi?"),
++		// Sistema de consumiveis. [CarlosHenrq]
++		BUILDIN_DEF2(getitem,"getitemstuff","vii?"),
+ 		BUILDIN_DEF(rentitem,"vi"),
+ 		BUILDIN_DEF(getitem2,"viiiiiiii?"),
+ 		BUILDIN_DEF(getnameditem,"vv"),
