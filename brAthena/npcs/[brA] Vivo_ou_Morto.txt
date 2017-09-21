@@ -1,0 +1,178 @@
+// ============================================================================================ \\
+// |------------------------------------------------------------------------------------------| \\
+// |------/\------------/\-------------/\--------------------------/\--------------/\---------| \\
+// |-----/--\----------/--\-----------/--\------------------------/--\------------/--\--------| \\
+// |----/---/\--------/----\---------/----\----------------------/----\----------/---/\-------| \\
+// |---/---/./-------/------\-------/-/\---\-----/\-------------/------\--------/---/./-------| \\
+// |--/---/./-------/---/\---\-----/--\.\--/----/--\-----------/---/\---\------/---/./-/\-----| \\
+// |--\---\/--------\---\.\---\----\---\/--\----\---\----------\---\.\---\-----\---\/-/--\----| \\
+// |--/\---\----/\--/\---\/----\---/\-------\---/\---\----/\---/\---\.\---\----/\---\/----\---| \\
+// |--\.\---\--/--\-\.\----/\---\--\.\----/\-\--\.\---\--/--\--\.\---\.\---\---\.\----/\---\--| \\
+// |---\.\---\/---/\-\.\---\.\--/\--\.\---\.\/\--\.\---\/---/\--\.\---\/---/\---\.\--/./---/\-| \\
+// |----\.\------/./--\.\---\.\/./---\.\---\../---\.\------/./---\.\------/./----\.\/./---/./-| \\
+// |-----\.\----/./----\.\---\../-----\.\---\/-----\.\----/./-----\.\----/./------\../---/./--| \\
+// |------\.\--/./------\.\--/\/-------\.\--/\------\.\--/./-------\.\--/./--------\/\--/./---| \\
+// |-------\.\/./--------\.\/./---------\.\/./-------\.\/./---------\.\/./-----------/\/./----| \\
+// |--------\../----------\../-----------\../---------\../-----------\../------------\../-----| \\
+// |---------\/------------\/-------------\/-----------\/-------------\/--------------\/------| \\
+// |------------------------------------------------------------------------------------------| \\
+// ============================================================================================ \\
+// | * Favor não Remover os créditos.                                                         | \\
+// | Feito por CarlosHenrq (brAthena/eAthena/Cronus).                                         | \\
+// ============================================================================================ \\
+// | * Compatibilidade de emulador: brAthena.                                                 | \\
+// ============================================================================================ \\
+// | * ChangeLog:                                                                             | \\
+// | v1.0 - Criada.                                                                           | \\
+// | v1.1 - Atualizado as falas e corrigido os probleminhas. [Danz]                           | \\
+// | v1.2 - Corrigido o Timer, estava em 5 segundos, alterado para 2 minutos. [YeahZin]       | \\
+// | v1.3a - Inicializado atualização do evento para os novos comandos. [CarlosHenrq]         | \\
+// ============================================================================================ \\
+// | * Descrição:                                                                             | \\
+// | - Pequeno jogo: Vivo ou Morto. Em pé = Vivo, Sentado = Morto.                            | \\
+// ============================================================================================ \\
+
+prontera,137,201,5	script	Vivo ou Morto::DA_GAME	4_F_NACORURI,{
+
+	// Se o evento já começou e o jogador está registrado
+	// Então o NPC ignora o click para não atrapalhar o jogador
+	if($@DA_INIT && @DA_INGAME)
+		end;
+
+	mes .NPC_NAME$;
+	if($@DA_INIT)
+	{
+		mes "O Jogo já está acontecendo!";
+		mes "Aguarde esta partida terminar e tente na próxima vez.";
+	}
+	else if(@DA_INGAME == $@DA_QUEUE)
+	{
+		mes "Você já está registrado!";
+		mes "Aguarde o jogo começar... Ou você quer sair da fila?";
+		next;
+		@DA_MENU = prompt("~ Irei aguardar!:~ Sair da fila");
+		
+		mes .NPC_NAME$;
+		if(@DA_MENU == 1 || @DA_MENU == 255)
+		{
+			mes "Tudo bem! Vamos começar já já!";
+			mes "Aguarde os outros participantes.";
+		}
+		else
+		{
+			callsub OnRemoveFromQueue;
+			mes "Ok! Você foi removido da fila!";
+			mes "Quando quiser jogar, volte a falar comigo.";
+		}
+	}
+	else
+	{
+		
+	}
+
+	close;
+	
+	OnInit:
+		// ---------- Configurações para execução do evento. ---------- //
+		
+		// Configurações de vitória.
+		.DA_ITEMID	= 607;
+		.DA_QTDE	= 10;
+		
+		// Configurações de participantes
+		.DA_MIN_PLAYER 		= 2;
+		.DA_MIN_TROLL		= 10;
+
+		// Configurações globais, não mexer...
+		$@DA_INIT = 0;
+		$@DA_QUEUE = -1;
+		
+		.NPC_NAME$	= "[^0000ff " + strnpcinfo(NPC_NAME_VISIBLE) + " ^000000]";
+
+		// Inicializa a primeira fila.
+		callsub OnCreateQueue;
+		end;
+	
+	/**
+	 * Chamado apenas quando a fila de execução for criada para jogadores
+	 * Irem jogar. Também será usada como fila de espera.
+	 */
+	OnCreateQueue:
+		
+		// Adiciona as opções para remoção dos jogadores que
+		//
+		// Morrerem
+		// Deslogarem
+		// Mudarem de mapa
+		//
+		// Quando acontecer, este será desvinculado do evento.
+		$@DA_QUEUE = queue();
+		queueopt($@DA_QUEUE, QUEUEOPT_DEATH, 		strnpcinfo(NPC_NAME_UNIQUE) + "::OnRemoveFromQueue");
+		queueopt($@DA_QUEUE, QUEUEOPT_LOGOUT, 		strnpcinfo(NPC_NAME_UNIQUE) + "::OnRemoveFromQueue");
+		queueopt($@DA_QUEUE, QUEUEOPT_MAPCHANGE, 	strnpcinfo(NPC_NAME_UNIQUE) + "::OnRemoveFromQueue");
+
+		end;
+	OnDeleteQueue:
+		// Deleta a fila 
+		queuedel $@DA_QUEUE;
+		end;
+
+	// Acontece quando o jogador realizar uma das 3 ações possíveis
+	// Enquanto estiver presente na fila.
+	OnRemoveFromQueue:
+
+		// Jogador sempre irá sair da queue!
+		// Se o evento estiver iniciado, então irá
+		// Exibir uma mensagem ao jogador.
+		queueremove($@DA_QUEUE, getcharid(3));
+		@DA_INGAME = 0;
+
+		// Se o evento já tiver começado, e acontecer um dos eventos
+		// O Jogador é desclassificado.
+		if($@DA_INIT)
+			dispbottom "[" + strnpcinfo(NPC_NAME_VISIBLE) + "]: Você foi desclassificado do jogo.";
+		else
+			dispbottom "[" + strnpcinfo(NPC_NAME_VISIBLE) + "]: Você foi removido da fila de espera.";
+		
+		// Chama o evento para definir o que irá acontecer com a fila apartir
+		// Deste momento. [Com apenas 1 jogador, Com nenhum jogador]
+		callsub OnCheckAfterRemove;
+		end;
+
+	// Evento chamado quando o jogador for registrado na fila.
+	OnRegisterQueue:
+
+		// Just-in-case... Não se pode adicionar novos registros
+		// Depois que o jogo começou...
+		if(!$@DA_INIT && !@DA_INGAME)
+		{
+			// Adiciona o jogador a fila e aponta que este
+			// Está jogando agora
+			queueadd($@DA_QUEUE, getcharid(3));
+			@DA_INGAME = $@DA_QUEUE;
+			
+			// Avisa o jogador que ele foi adicionado a fila
+			dispbottom "[" + strnpcinfo(NPC_NAME_VISIBLE) + "]: Você foi adicionado a fila para jogar.";
+
+			// Chama o label para inicializar o evento
+			callsub OnCheckAfterRegister;
+		}
+		else
+		{
+			// Avisa o jogador que ele não pode entrar na fila
+			// Motivos:
+			// 1- Ele já entrou na fila uma vez
+			// 2- O Jogo já começou
+			dispbottom "[" + strnpcinfo(NPC_NAME_VISIBLE) + "]: Você não pode entrar na fila agora...";
+		}
+
+		end;
+
+	OnCheckAfterRegister:
+		// @TODO: Verificações de inicialização do evento
+		end;
+
+	OnCheckAfterRemove:
+		// @TODO: Verificações de remoção de jogador
+		end;
+}
