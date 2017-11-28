@@ -40,6 +40,20 @@ prontera,137,201,5	script	Vivo ou Morto::DA_GAME	4_F_NACORURI,{
 		end;
 
 	mes .NPC_NAME$;
+
+	// Verifica que o jogador possui itens a receber do NPC por
+	// Vitórias anteriores.
+	if(DA_GAME_WIN > 0)
+	{
+		mes "Você possui itens de vitórias para receber.";
+		mes "Gostaria de receber eles agora?";
+		next;
+		@DA_MENU = prompt("~ Não: ~ Sim");
+		if(@DA_MENU == 2)
+			callsub OnGetWinItems;
+		mes .NPC_NAME$;
+	}
+
 	if($@DA_INIT)
 	{
 		mes "O Jogo já está acontecendo!";
@@ -115,6 +129,7 @@ prontera,137,201,5	script	Vivo ou Morto::DA_GAME	4_F_NACORURI,{
 	OnDeleteQueue:
 		// Deleta a fila 
 		queuedel $@DA_QUEUE;
+		return;
 		end;
 
 	// Acontece quando o jogador realizar uma das 3 ações possíveis
@@ -173,6 +188,52 @@ prontera,137,201,5	script	Vivo ou Morto::DA_GAME	4_F_NACORURI,{
 		end;
 
 	OnCheckAfterRemove:
-		// @TODO: Verificações de remoção de jogador
+
+		// Testa se o jogo está em execução, caso esteja, verifica a quantidade de jogadores
+		// que ainda estão na fila para jogar...
+		if($@DA_INIT)
+		{
+			// Remove o jogador vinculado ao evento, se houver...
+			detachrid;
+
+			// Com apenas 1 jogador é hora de encerrar o jogo...
+			if(queuesize($@DA_QUEUE) == 1)
+			{
+				.@qid = queueiterator($@DA_QUEUE);
+				.@aid = qiget(.@qid);
+				qiclear(.@qid);
+				callsub OnDeleteQueue;
+				$@DA_QUEUE = -1;
+				$@DA_INIT = 0;
+
+				// Após obter o unico registro vencedor da lista anuncia em local o vencedor.
+				npctalk strcharinfo(PC_NAME, "", .@aid) + " é o grande vencedor!";
+				sleep 3000;
+				
+				attachrid .@aid;
+				@DA_INGAME = 0;
+				
+				// Soma mais uma vitória do evento para poder obter os itens...
+				DA_GAME_WIN++;
+				
+				// Caso o jogador possa receber o premio, já entrega o mesmo ao jogador
+				// Fazendo com que não precise voltar ao npc futuramente...
+				if(checkweight(.DA_ITEMID, .DA_QTDE))
+					callsub OnGetWinItems;
+			}
+		}
+
+		return;
+		end;
+	OnGetWinItems:
+		// Caso exista número de vitórias na conta e consiga carregar os itens
+		// Entrega os mesmos ao jogador.
+		while(DA_GAME_WIN > 0 && checkweight(.DA_ITEMID, .DA_QTDE))
+		{
+			getitem .DA_ITEMID, .DA_QTDE;
+			DA_GAME_WIN--;
+		}
+
+		return;
 		end;
 }
