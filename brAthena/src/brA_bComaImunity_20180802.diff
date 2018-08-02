@@ -13,14 +13,14 @@ index 5dc1d91..0369c82 100644
 --- a/conf/messages.conf
 +++ b/conf/messages.conf
 @@ -1562,5 +1562,9 @@
- 3009: SolicitaÃ§Ã£o de unban por mac enviada ao char-server.
- 3010: Seu mac-address jÃ¡ consta no mapa solicitado.
+ 3009: Solicitação de unban por mac enviada ao char-server.
+ 3010: Seu mac-address já consta no mapa solicitado.
  
 +// Imunidade ao coma.
-+3100: VocÃª estÃ¡ imune ao coma por %d segundos.
-+3101: VocÃª nÃ£o estÃ¡ mais imune ao coma.
++3100: Você está imune ao coma por %d segundos.
++3101: Você não está mais imune ao coma.
 +
- // TraduÃ§Ãµes personalizadas
+ // Traduções personalizadas
  import: conf/import/msg_conf.txt
 diff --git a/sql/pre-renovacao/pre-renovacao.sql b/sql/pre-renovacao/pre-renovacao.sql
 index ccf0bd0..1e8cfbe 100644
@@ -114,7 +114,7 @@ index e7f5139..6e9ae6d 100644
  	int login_id1, login_id2;
  	unsigned short class_; //This is the internal job ID used by the map server to simplify comparisons/queries/etc. [Skotlex]
 diff --git a/src/map/status.c b/src/map/status.c
-index 6580f62..6015aae 100644
+index 6580f62..1c46a12 100644
 --- a/src/map/status.c
 +++ b/src/map/status.c
 @@ -6699,6 +6699,30 @@ int status_isimmune(struct block_list *bl)
@@ -136,7 +136,7 @@ index 6580f62..6015aae 100644
 +	if(bl == NULL || bl->type != BL_PC || (sd = BL_UCAST(BL_PC, bl)) == NULL)
 +		return false;
 +
-+	// Jogador ÃƒÂ© imune ao coma.
++	// Jogador Ã© imune ao coma.
 +	if(sd->sc.data[SC_NOCOMA])
 +		return true;
 +
@@ -159,21 +159,21 @@ index 6580f62..6015aae 100644
  	sd = BL_CAST(BL_PC,bl);
  	st = status->get_status_data(bl);
  	bst = status->get_base_status(bl);
-@@ -7135,6 +7163,14 @@ int status_get_sc_def(struct block_list *src, struct block_list *bl, enum sc_typ
- 	case SC_B_TRAP:
- 		tick_def = (sd ? sd->status.str : status->get_base_status(bl)->str) * 50; // (custom)
- 		break;
-+	case SC_NOCOMA:
-+		if(sd && sd->fd)
-+		{
-+			char msg[128] = "";
-+			sprintf(msg, msg_sd(sd, 3100), tick/1000);
-+			clif->messagecolor_self(sd->fd, COLOR_DEFAULT, msg);
-+		}
-+		break;
- 	default:
- 		//Effect that cannot be reduced? Likely a buff.
- 		if (!(rnd()%10000 < rate))
+@@ -7445,6 +7473,14 @@ int status_change_start(struct block_list *src, struct block_list *bl, enum sc_t
+ 	undead_flag = battle->check_undead(st->race,st->def_ele);
+ 	//Check for inmunities / sc fails
+ 	switch (type) {
++		case SC_NOCOMA:
++			if(sd && sd->fd)
++			{
++				char msg[128] = "";
++				sprintf(msg, msg_sd(sd, 3100), tick/1000);
++				clif->messagecolor_self(sd->fd, COLOR_DEFAULT, msg);
++			}
++			break;
+ 		case SC_DRUMBATTLE:
+ 		case SC_NIBELUNGEN:
+ 		case SC_INTOABYSS:
 @@ -10593,6 +10629,10 @@ int status_change_end_(struct block_list* bl, enum sc_type type, int tid, const
  	vd = status->get_viewdata(bl);
  	calc_flag = status->dbs->ChangeFlagTable[type];
@@ -201,7 +201,7 @@ index fd72496..fe6e366 100644
  	SC_EL_OFFENSIVE,
  	SC_EL_WAIT,
  	
-+	// [CarlosHenrq] ProteÃƒÂ§ÃƒÂ£o ao coma
++	// [CarlosHenrq] ProteÃ§Ã£o ao coma
 +	SC_NOCOMA = 893,
 +
  	SC_MAX, //Automatically updated max, used in for's to check we are within bounds.
